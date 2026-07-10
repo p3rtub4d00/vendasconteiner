@@ -1,5 +1,6 @@
 const { Client, LocalAuth } = require('whatsapp-web.js');
-const qrcode = require('qrcode-terminal');
+const qrcodeTerminal = require('qrcode-terminal');
+const qrcode = require('qrcode'); // Nova biblioteca para gerar a imagem web
 const express = require('express');
 const axios = require('axios');
 
@@ -8,24 +9,58 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const RENDER_URL = process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`;
 
-app.get('/', (req, res) => res.send('Assistente de Vendas Online!'));
+// Variáveis para guardar o estado do bot e a imagem do QR Code
+let qrCodeImage = '';
+let statusDoBot = 'Iniciando sistema, aguarde...';
+
+// Rota principal (Onde você vai acessar pelo navegador)
+app.get('/', (req, res) => {
+    res.send(`
+        <html>
+            <head>
+                <title>Conteiner Beer - Assistente</title>
+                <meta charset="utf-8">
+                <!-- A página atualiza sozinha a cada 5 segundos -->
+                <meta http-equiv="refresh" content="5"> 
+                <style>
+                    body { font-family: Arial, sans-serif; text-align: center; margin-top: 50px; background-color: #121214; color: #fff; }
+                    .card { background: #202024; padding: 40px; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); display: inline-block; border: 1px solid #323238; }
+                    h1 { color: #F7B731; }
+                    .status { font-weight: bold; font-size: 18px; margin-bottom: 20px; color: #00B8D9; }
+                    .success { color: #00D084; }
+                    img { border-radius: 10px; border: 5px solid #fff; }
+                </style>
+            </head>
+            <body>
+                <div class="card">
+                    <h1>Assistente - Conteiner Beer 🍻</h1>
+                    <p class="status ${statusDoBot === '✅ Bot conectado e pronto!' ? 'success' : ''}">${statusDoBot}</p>
+                    
+                    <!-- Se tiver um QR Code pronto, exibe a imagem -->
+                    ${qrCodeImage ? `<img src="${qrCodeImage}" alt="QR Code do WhatsApp" style="width: 250px; height: 250px;" />` : ''}
+                    
+                    <p style="font-size: 14px; color: #8D8D99; margin-top: 20px;">A página atualiza automaticamente.</p>
+                </div>
+            </body>
+        </html>
+    `);
+});
+
 app.get('/ping', (req, res) => res.send('pong'));
 
 app.listen(PORT, () => {
     console.log(`Servidor web rodando na porta ${PORT}`);
-    
-    // Ping automático a cada 14 minutos para evitar hibernação do Render
     setInterval(async () => {
         try {
             await axios.get(`${RENDER_URL}/ping`);
-            console.log('Ping automático realizado: Sistema mantido acordado.');
+            console.log('Ping automático realizado.');
         } catch (error) {
-            console.error('Erro no ping automático:', error.message);
+            console.error('Erro no ping:', error.message);
         }
     }, 14 * 60 * 1000); 
 });
 
-// === 2. BANCO DE DADOS FAKE (Fase de Testes) ===
+// === 2. BANCO DE DADOS FAKE ===
 const catalogo = {
     "skol 300ml": { precoCaixa: 65.00 },
     "heineken 600ml": { precoCaixa: 180.00 },
@@ -40,32 +75,40 @@ const client = new Client({
     puppeteer: {
         args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
     },
-    // TRUQUE ANTI-BLOQUEIO: Força uma versão do WhatsApp Web aceita pela Meta
     webVersionCache: {
         type: 'remote',
         remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2412.54.html'
     }
 });
 
-client.on('qr', (qr) => {
-    console.log('=========================================');
-    console.log('📱 ESCANEIE O QR CODE COM O WHATSAPP:');
-    qrcode.generate(qr, { small: true });
-    console.log('=========================================');
+client.on('qr', async (qr) => {
+    console.log('QR Code gerado! Atualize o site para ver.');
+    statusDoBot = '⚠️ Escaneie o QR Code abaixo com o WhatsApp do Conteiner:';
+    
+    try {
+        // Transforma o texto do QR Code em uma imagem Base64 de verdade
+        qrCodeImage = await qrcode.toDataURL(qr); 
+    } catch (err) {
+        console.error('Erro ao gerar imagem:', err);
+    }
+    
+    // Mantém no terminal caso precise debugar
+    qrcodeTerminal.generate(qr, { small: true }); 
 });
 
 client.on('ready', () => {
-    console.log('✅ Bot conectado ao WhatsApp e pronto para registrar vendas!');
+    console.log('✅ Bot conectado ao WhatsApp!');
+    statusDoBot = '✅ Bot conectado e pronto!';
+    qrCodeImage = ''; // Limpa o QR code da tela pois já conectou
 });
 
 client.on('message', async msg => {
-    if (msg.author) return; // Ignora mensagens de grupos
+    if (msg.author) return; 
 
     const texto = msg.body.toLowerCase();
 
-    // Lógica provisória de teste 
     if (texto.includes('registre a venda')) {
-        const produto = "skol 300ml"; // Fixo para teste
+        const produto = "skol 300ml"; 
         const quantidade = 5;
         const valorTotal = catalogo[produto].precoCaixa * quantidade;
 
