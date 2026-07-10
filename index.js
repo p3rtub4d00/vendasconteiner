@@ -1,6 +1,6 @@
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcodeTerminal = require('qrcode-terminal');
-const qrcode = require('qrcode'); // Nova biblioteca para gerar a imagem web
+const qrcode = require('qrcode');
 const express = require('express');
 const axios = require('axios');
 
@@ -9,18 +9,15 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const RENDER_URL = process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`;
 
-// Variáveis para guardar o estado do bot e a imagem do QR Code
 let qrCodeImage = '';
 let statusDoBot = 'Iniciando sistema, aguarde...';
 
-// Rota principal (Onde você vai acessar pelo navegador)
 app.get('/', (req, res) => {
     res.send(`
         <html>
             <head>
                 <title>Conteiner Beer - Assistente</title>
                 <meta charset="utf-8">
-                <!-- A página atualiza sozinha a cada 5 segundos -->
                 <meta http-equiv="refresh" content="5"> 
                 <style>
                     body { font-family: Arial, sans-serif; text-align: center; margin-top: 50px; background-color: #121214; color: #fff; }
@@ -35,10 +32,7 @@ app.get('/', (req, res) => {
                 <div class="card">
                     <h1>Assistente - Conteiner Beer 🍻</h1>
                     <p class="status ${statusDoBot === '✅ Bot conectado e pronto!' ? 'success' : ''}">${statusDoBot}</p>
-                    
-                    <!-- Se tiver um QR Code pronto, exibe a imagem -->
                     ${qrCodeImage ? `<img src="${qrCodeImage}" alt="QR Code do WhatsApp" style="width: 250px; height: 250px;" />` : ''}
-                    
                     <p style="font-size: 14px; color: #8D8D99; margin-top: 20px;">A página atualiza automaticamente.</p>
                 </div>
             </body>
@@ -73,7 +67,16 @@ let vendasDoDia = [];
 const client = new Client({
     authStrategy: new LocalAuth(),
     puppeteer: {
-        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+        args: [
+            '--no-sandbox', 
+            '--disable-setuid-sandbox', 
+            '--disable-dev-shm-usage',
+            '--disable-accelerated-2d-canvas',
+            '--no-first-run',
+            '--no-zygote',
+            '--single-process', // <-- MÁGICA AQUI: Economiza muita memória RAM
+            '--disable-gpu'
+        ]
     },
     webVersionCache: {
         type: 'remote',
@@ -84,22 +87,18 @@ const client = new Client({
 client.on('qr', async (qr) => {
     console.log('QR Code gerado! Atualize o site para ver.');
     statusDoBot = '⚠️ Escaneie o QR Code abaixo com o WhatsApp do Conteiner:';
-    
     try {
-        // Transforma o texto do QR Code em uma imagem Base64 de verdade
         qrCodeImage = await qrcode.toDataURL(qr); 
     } catch (err) {
         console.error('Erro ao gerar imagem:', err);
     }
-    
-    // Mantém no terminal caso precise debugar
     qrcodeTerminal.generate(qr, { small: true }); 
 });
 
 client.on('ready', () => {
     console.log('✅ Bot conectado ao WhatsApp!');
     statusDoBot = '✅ Bot conectado e pronto!';
-    qrCodeImage = ''; // Limpa o QR code da tela pois já conectou
+    qrCodeImage = ''; 
 });
 
 client.on('message', async msg => {
